@@ -1,0 +1,26 @@
+{
+    "include": [
+        "./src/**/*"
+    ],
+    "compilerOptions": {
+        "strict": true,
+        "esModuleInterop": true,
+        "moduleResolution": "node",
+        "target": "ES2015",
+        "lib": [
+            "dom",
+            "esnext",
+            "ES2017"
+        ],
+        "jsx": "react",
+        "baseUrl": "./src",
+        "paths": {
+            "types": [
+                "types.ts"
+            ],
+            "lib/*": [
+                "lib/*"
+            ]
+        }
+    }
+}
