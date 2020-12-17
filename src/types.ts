@@ -23,12 +23,8 @@ export interface BoxTransform {
   y: number
   w: number
   h: number
-  nx: number
-  ny: number
-  nmx: number
-  nmy: number
-  nw: number
-  nh: number
+  maxX: number
+  maxY: number
 }
 
 export interface Bounds {

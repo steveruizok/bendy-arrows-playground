@@ -228,14 +228,14 @@ const state = createState({
           onEnter: "setEdgeResizer",
           on: {
             MOVED_POINTER: ["resizeByEdge", "render", "renderOverlay"],
-            LIFTED_POINTER: { to: "idle" }
+            LIFTED_POINTER: { do: "saveData", to: "idle" }
           }
         },
         cornerResizing: {
           onEnter: "setCornerResizer",
           on: {
             MOVED_POINTER: ["resizeByCorner", "render", "renderOverlay"],
-            LIFTED_POINTER: { to: "idle" }
+            LIFTED_POINTER: { do: "saveData", to: "idle" }
           }
         }
       }

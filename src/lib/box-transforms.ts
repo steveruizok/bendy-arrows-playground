@@ -1,5 +1,5 @@
 import Box from "./Box"
-import { Pointer, Bounds, BoxTransform } from "types"
+import { Pointer, Bounds } from "types"
 
 export const resizers = {
   edge: null as Resizer | null,
@@ -154,29 +154,21 @@ export function getBoundingBox(boxes: Box[]) {
   }
 }
 
-function getSnapshots(
-  boxes: Box[],
-  bounds: Bounds
-): Record<string, BoxTransform> {
-  const acc = {} as Record<string, BoxTransform>
+function getBoxNormals(boxes: Box[], bounds: Bounds) {
+  const boxNormals: Record<string, Bounds> = {}
 
   for (let box of boxes) {
-    const { x, y, w, h } = box
-    acc[box.id] = {
-      x,
-      y,
-      w,
-      h,
-      nx: (x - bounds.x) / bounds.w,
-      ny: (y - bounds.y) / bounds.h,
-      nmx: 1 - (x + w - bounds.x) / bounds.w,
-      nmy: 1 - (y + h - bounds.y) / bounds.h,
-      nw: w / bounds.w,
-      nh: h / bounds.h
+    boxNormals[box.id] = {
+      x: (box.x - bounds.x) / bounds.w,
+      y: (box.y - bounds.y) / bounds.h,
+      maxX: (box.maxX - bounds.x) / bounds.w,
+      maxY: (box.maxY - bounds.y) / bounds.h,
+      w: box.w / bounds.w,
+      h: box.h / bounds.h
     }
   }
 
-  return acc
+  return boxNormals
 }
 
 export function getEdgeResizer(
@@ -184,39 +176,79 @@ export function getEdgeResizer(
   initialBounds: Bounds,
   edge: number
 ) {
-  const snapshots = getSnapshots(initialBoxes, initialBounds)
+  const normalizedBoxes = getBoxNormals(initialBoxes, initialBounds)
 
-  let { x: x0, y: y0, maxX: x1, maxY: y1 } = initialBounds
-  let { x: mx, y: my, w: bw, h: bh } = initialBounds
+  // Save these
+  const { x: bx, y: by, w: bw, h: bh } = initialBounds
+  const midX = bx + bw / 2
+  const midY = by + bh / 2
+  const aspectRatio = bw / bh
 
-  resizers.edge = (point: Pointer, boxes: Box[], bounds: Bounds) => {
+  // Mutate these
+  let { x: minX, y: minY, maxX, maxY } = initialBounds,
+    flipX: boolean,
+    flipY: boolean
+
+  resizers.edge = (
+    point: Pointer,
+    boxes: Box[],
+    bounds: Bounds,
+    lockAspect: boolean
+  ) => {
     const { x, y } = point
-    if (edge === 0 || edge === 2) {
-      edge === 0 ? (y0 = y) : (y1 = y)
-      my = y0 < y1 ? y0 : y1
-      bh = Math.abs(y1 - y0)
-      for (let box of boxes) {
-        const { ny, nmy, nh } = snapshots[box.id]
-        box.y = my + (y1 < y0 ? nmy : ny) * bh
-        box.h = nh * bh
+
+    if (edge % 2 === 0) {
+      // T0 or B2 edge
+      if (edge === 0) minY = y
+      else maxY = y
+
+      flipY = maxY < minY
+
+      bounds.y = flipY ? maxY : minY
+      bounds.h = Math.abs(maxY - minY)
+
+      if (lockAspect) {
+        bounds.w = bounds.h * aspectRatio
+        if (edge === 1) maxX = flipX ? minX - bounds.w : minX + bounds.w
+        else minX = flipX ? maxX + bounds.w : maxX - bounds.w
+        bounds.x = flipX ? maxX : minX
+        bounds.x -= bounds.x + bounds.w / 2 - midX
+      } else {
+        bounds.x = bx
+        bounds.w = bw
       }
     } else {
-      edge === 1 ? (x1 = x) : (x0 = x)
-      mx = x0 < x1 ? x0 : x1
-      bw = Math.abs(x1 - x0)
-      for (let box of boxes) {
-        const { nx, nmx, nw } = snapshots[box.id]
-        box.x = mx + (x1 < x0 ? nmx : nx) * bw
-        box.w = nw * bw
+      // L3 or R1 Edge
+      if (edge === 1) maxX = x
+      else minX = x
+
+      flipX = maxX < minX
+
+      bounds.x = flipX ? maxX : minX
+      bounds.w = Math.abs(maxX - minX)
+
+      if (lockAspect) {
+        bounds.h = bounds.w / aspectRatio
+        if (edge === 0) minY = flipY ? maxY + bounds.h : maxY - bounds.h
+        else maxY = flipY ? minY - bounds.h : minY + bounds.h
+        bounds.y = flipY ? maxY : minY
+        bounds.y -= bounds.y + bounds.h / 2 - midY
+      } else {
+        bounds.y = by
+        bounds.h = bh
       }
     }
 
-    bounds.x = mx
-    bounds.y = my
-    bounds.w = bw
-    bounds.h = bh
-    bounds.maxX = mx + bw
-    bounds.maxY = my + bh
+    bounds.maxX = bounds.x + bounds.w
+    bounds.maxY = bounds.y + bounds.h
+
+    for (let box of boxes) {
+      const nBox = normalizedBoxes[box.id]
+      box.y = bounds.y + (flipY ? 1 - nBox.maxY : nBox.y) * bounds.h
+      box.h = nBox.h * bounds.h
+      box.x = bounds.x + (flipX ? 1 - nBox.maxX : nBox.x) * bounds.w
+      box.w = nBox.w * bounds.w
+    }
   }
 
   return resizers.edge
@@ -235,73 +267,73 @@ export function getCornerResizer(
   initialBounds: Bounds,
   corner: number
 ) {
-  const snapshots = getSnapshots(initialBoxes, initialBounds)
+  const normalizedBoxes = getBoxNormals(initialBoxes, initialBounds)
 
-  // TL = x0/y0  TR = x1/y0
-  //          [  ]
-  // BL = x0/y1  BR = x1/y1
+  // Save these
+  const aspectRatio = initialBounds.w / initialBounds.h
 
-  let { x: x0, y: y0, maxX: x1, maxY: y1 } = initialBounds
-  let { x: mx, y: my, w: bw, h: bh } = initialBounds
-  let ar = bw / bh
-  let cr = ar
+  // Mutate these
+  let { x: minX, y: minY, maxX, maxY } = initialBounds,
+    flipX: boolean,
+    flipY: boolean,
+    isTopCorner: boolean,
+    isRightCorner: boolean
 
   resizers.corner = (
     point: Pointer,
     boxes: Box[],
     bounds: Bounds,
-    aspect = false
+    lockAspect = false
   ) => {
-    let { x, y } = point
-    const topCorner = corner < 2
-    const rightCorner = corner === 1 || corner === 2
+    isTopCorner = corner < 2 // 0TL or 1TR
+    isRightCorner = corner % 3 > 0 // 1TR or 2BR
 
     // Update dragging corners
-    if (topCorner) y0 = y
-    else y1 = y
-    if (rightCorner) x1 = x
-    else x0 = x
+    if (isTopCorner) minY = point.y
+    else maxY = point.y
 
-    bw = Math.abs(x1 - x0) // What's the bounds width?
-    bh = Math.abs(y1 - y0) // What's the bounds height?
+    if (isRightCorner) maxX = point.x
+    else minX = point.x
 
-    if (aspect) {
-      cr = bw / bh // Current ratio (pre-aspect)
+    // Are we flipped?
+    flipX = maxX < minX
+    flipY = maxY < minY
 
-      if (cr > ar) {
-        bh = bw / ar
-        if (topCorner) {
-          y0 = y1 > y0 ? y1 - bh : y1 + bh
-        } else {
-          y1 = y0 > y1 ? y0 - bh : y0 + bh
-        }
+    bounds.w = Math.abs(maxX - minX)
+    bounds.h = Math.abs(maxY - minY)
+
+    if (lockAspect) {
+      if (bounds.w / bounds.h > aspectRatio) {
+        // Scale bounds height by aspect ratio
+        // and move points to fit new height
+        bounds.h = bounds.w / aspectRatio
+        if (isTopCorner) minY = flipY ? maxY + bounds.h : maxY - bounds.h
+        else maxY = flipY ? minY - bounds.h : minY + bounds.h
       } else {
-        bw = bh * ar
-        if (rightCorner) {
-          x1 = x1 < x0 ? x0 - bw : x0 + bw
-        } else {
-          x0 = x0 < x1 ? x1 - bw : x1 + bw
-        }
+        // Scale bounds width by aspect ratio
+        // and move points to fit new width
+        bounds.w = bounds.h * aspectRatio
+        if (isRightCorner) maxX = flipX ? minX - bounds.w : minX + bounds.w
+        else minX = flipX ? maxX + bounds.w : maxX - bounds.w
       }
     }
 
-    my = y0 > y1 ? y1 : y0 // Which is the min x?
-    mx = x0 > x1 ? x1 : x0 // Which is the min y?
+    bounds.x = flipX ? maxX : minX
+    bounds.y = flipY ? maxY : minY
+    bounds.maxX = bounds.x + bounds.w
+    bounds.maxY = bounds.y + bounds.h
 
     for (let box of boxes) {
-      const { nx, nmx, nw, ny, nmy, nh } = snapshots[box.id]
-      box.x = mx + (x1 < x0 ? nmx : nx) * bw
-      box.y = my + (y1 < y0 ? nmy : ny) * bh
-      box.w = nw * bw
-      box.h = nh * bh
+      // Use the box's initial size normals to calculate
+      // its size in the new bounds.
+      const nBox = normalizedBoxes[box.id]
+      box.x = bounds.x + (flipX ? 1 - nBox.maxX : nBox.x) * bounds.w
+      box.y = bounds.y + (flipY ? 1 - nBox.maxY : nBox.y) * bounds.h
+      box.w = nBox.w * bounds.w
+      box.h = nBox.h * bounds.h
     }
 
-    bounds.x = mx
-    bounds.y = my
-    bounds.w = bw
-    bounds.h = bh
-    bounds.maxX = mx + bw
-    bounds.maxY = my + bh
+    return boxes
   }
 
   return resizers.corner

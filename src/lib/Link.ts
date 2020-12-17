@@ -76,7 +76,8 @@ function getCurvedBoxToBoxArrow(
     cx0 = x0 + w0 / 2,
     cy0 = y0 + h0 / 2,
     cx1 = x1 + w1 / 2,
-    cy1 = y1 + h1 / 2
+    cy1 = y1 + h1 / 2,
+    angle = getAngle(cx0, cy0, cx1, cy1)
 
   if (bow === 0) {
     let [[sx, sy]] = getSegmentRectangleIntersectionPoints(
@@ -111,8 +112,13 @@ function getCurvedBoxToBoxArrow(
   // Create a anchor point based on the arc and distance
   const [ax, ay] = getAnchorPoint(x0, y0, w0, h0, x1, y1, w1, h1, options)
 
+  // Interesting — it looks better if the arrows don't touch the center, but
+  // a point just a little bit offset toward the other box.
+  let [px0, py0] = projectPoint(cx0, cy0, angle, Math.min(w0, h0) / 6)
+  let [px1, py1] = projectPoint(cx1, cy1, angle + Math.PI, Math.min(w1, h1) / 6)
+
   // Calculate a circle arc that touches both centers and the anchor point
-  let [cx, cy, cr] = circleFromThreePoints(cx0, cy0, cx1, cy1, ax, ay)
+  let [cx, cy, cr] = circleFromThreePoints(px0, py0, px1, py1, ax, ay)
 
   // Find the intersections between the circle and the rectangles.
   ;[s0, s1] = getCircleRectangleIntersectionPoints(x0, y0, w0, h0, cx, cy, cr)
