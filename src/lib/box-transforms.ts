@@ -179,10 +179,10 @@ export function getEdgeResizer(
   const normalizedBoxes = getBoxNormals(initialBoxes, initialBounds)
 
   // Save these
-  const { x: bx, y: by, w: bw, h: bh } = initialBounds
-  const midX = bx + bw / 2
-  const midY = by + bh / 2
-  const aspectRatio = bw / bh
+  const { x: left, y: top, w: width, h: height } = initialBounds
+  const midX = left + width / 2
+  const midY = top + height / 2
+  const aspectRatio = width / height
 
   // Mutate these
   let { x: minX, y: minY, maxX, maxY } = initialBounds,
@@ -209,13 +209,11 @@ export function getEdgeResizer(
 
       if (lockAspect) {
         bounds.w = bounds.h * aspectRatio
-        if (edge === 1) maxX = flipX ? minX - bounds.w : minX + bounds.w
-        else minX = flipX ? maxX + bounds.w : maxX - bounds.w
-        bounds.x = flipX ? maxX : minX
-        bounds.x -= bounds.x + bounds.w / 2 - midX
+        bounds.x = (2 * midX - bounds.w) / 2
+        bounds.maxX = bounds.x + bounds.w
       } else {
-        bounds.x = bx
-        bounds.w = bw
+        bounds.x = left
+        bounds.w = width
       }
     } else {
       // L3 or R1 Edge
@@ -229,25 +227,20 @@ export function getEdgeResizer(
 
       if (lockAspect) {
         bounds.h = bounds.w / aspectRatio
-        if (edge === 0) minY = flipY ? maxY + bounds.h : maxY - bounds.h
-        else maxY = flipY ? minY - bounds.h : minY + bounds.h
-        bounds.y = flipY ? maxY : minY
-        bounds.y -= bounds.y + bounds.h / 2 - midY
+        bounds.y = (2 * midY - bounds.h) / 2
+        bounds.maxY = bounds.y + bounds.h
       } else {
-        bounds.y = by
-        bounds.h = bh
+        bounds.y = top
+        bounds.h = height
       }
     }
 
-    bounds.maxX = bounds.x + bounds.w
-    bounds.maxY = bounds.y + bounds.h
-
     for (let box of boxes) {
       const nBox = normalizedBoxes[box.id]
-      box.y = bounds.y + (flipY ? 1 - nBox.maxY : nBox.y) * bounds.h
-      box.h = nBox.h * bounds.h
       box.x = bounds.x + (flipX ? 1 - nBox.maxX : nBox.x) * bounds.w
+      box.y = bounds.y + (flipY ? 1 - nBox.maxY : nBox.y) * bounds.h
       box.w = nBox.w * bounds.w
+      box.h = nBox.h * bounds.h
     }
   }
 
